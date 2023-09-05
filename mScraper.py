@@ -1,8 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
-from Medium.mVariables import team_dictionary, month_list, month_dictionary
-from Medium.emailFunc import error_sender
+from mVariables import team_dictionary, month_list, month_dictionary
+# from emailFunc import error_sender
 
 month_list = ['september','october', 'november', 'december', 'january', 'february', 'march', 'april', 'may', 'june']
 month_dictionary = {'Jan': '01', 'Feb': '02',  'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06', 'Jul': '07', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
@@ -159,11 +159,7 @@ season16_17 = 'https://www.basketball-reference.com/leagues/NBA_2017_games.html'
 season17_18 = 'https://www.basketball-reference.com/leagues/NBA_2018_games.html'
 season18_19 = 'https://www.basketball-reference.com/leagues/NBA_2019_games.html'
 season19_20 = 'https://www.basketball-reference.com/leagues/NBA_2020_games.html' #2019-20
-season20_21 = 'https://www.basketball-reference.com/leagues/NBA_2021_games.html'
-season21_22 = 'https://www.basketball-reference.com/leagues/NBA_2022_games.html'
-season22_23 = 'https://www.basketball-reference.com/leagues/NBA_2023_games.html'
-season23_24 = 'https://www.basketball-reference.com/leagues/NBA_2024_games.html'
-season_stats_getter(season22_23)
+season_stats_getter(season19_20)
 # link_array = [season16_17, season17_18, season18_19, season19_20]
 #
 # for link in link_array[::-1]:
