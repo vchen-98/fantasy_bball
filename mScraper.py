@@ -1,166 +1,230 @@
 import requests
-from bs4 import BeautifulSoup
 import pandas as pd
-from mVariables import team_dictionary, month_list, month_dictionary
-# from emailFunc import error_sender
+from bs4 import BeautifulSoup
+from tqdm import tqdm
+import time
+import socket
+import os
+import pickle
 
-month_list = ['september','october', 'november', 'december', 'january', 'february', 'march', 'april', 'may', 'june']
-month_dictionary = {'Jan': '01', 'Feb': '02',  'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06', 'Jul': '07', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
+class BbrefScraper:
+    def __init__(self, season_start_links, scrape_type):
+        self.scrape_type = scrape_type
+        self.season_start_links = season_start_links
+        self.base_url = 'https://www.basketball-reference.com'
 
-def season_stats_getter(start_url):
-    '''This function uses basketballreference.com as its retriever.  Go to the website, and find the season you would like to scrape.  Then click on the first month given in the season (october)
-    After inputting this link, the program and determine the season and months given, and will scrape each box_score link on each month-page
-    It will also create a csv holding the season stats'''
-    base_url = 'https://www.basketball-reference.com'   #used for formatting each link correctly
-    month_link_array = []
-    response = requests.get(start_url)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    season = soup.find('h1').text
-    season = season.strip().split(' ')
-    season = season[0]
-    body = soup.findAll('body')
-    months = body[0].findAll('a', href = True)
-    for i in months:
-        if i.text.lower() in month_list:
-            i = (i.text, f'{base_url}{i["href"]}')
-            month_link_array.append(i)  #appending the url for each page to scrape
-    #iterating through each month url to scrape the data
-    page_tocheck_dict = {'Month': [], 'Url': [], 'Index': []}
-    box_link_array = []
-    all_dates = []
-    for month, page in month_link_array:
-        page_link_array = []
-        page_date_array = []
-        response = requests.get(page)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        table = soup.findAll('tbody')
-        box_scores = table[0].findAll('a', href=True)
-        for i in box_scores:
-            if i.text.strip() == 'Box Score':
-                page_link_array.append(f'{base_url}{i["href"]}')
-            if ',' in i.text.strip():
-                date = i.text.strip()
-                date = date.split(', ')
-                year = date[2]
-                date = date[1].split(' ')
-                day = f'0{date[1]}' if len(date[1]) == 1 else date[1]
+        computer_name = socket.gethostname()
 
-                mon = month_dictionary[date[0]]
-                date = f'{year}{mon}{day}'
-                page_date_array.append(date)
-        if len(page_link_array) == 0 or len(box_scores) / len(page_link_array) != 4:
-            page_tocheck_dict['Url'].append(page)
-            page_tocheck_dict['Month'].append(month)
-            page_tocheck_dict['Index'].append(len(page_link_array))
-        else:
-            page_tocheck_dict['Url'].append(page)
-            page_tocheck_dict['Month'].append(month)
-            page_tocheck_dict['Index'].append(None)
-        box_link_array.append(page_link_array)
-        all_dates.append(page_date_array)
-    print(box_link_array)
-    df_columns = ['Date', 'GameID', 'Name', 'Team', 'OPP', 'Home', 'Away', 'MP', 'FG', 'FGA', 'FG%', '3P', '3PA',
-                  '3P%', 'FT', 'FTA', 'FT%', 'ORB', 'DRB', 'TRB', 'AST', 'STL', 'BLK',
-                  'TOV', 'PF', 'PTS', '+-' ]
-    error_df = pd.DataFrame(columns = ['URL', 'Error'])
-    stat_df = pd.DataFrame(columns = df_columns)
-    print(box_link_array)
-    for idx_pos, (l, d) in enumerate(zip(box_link_array, all_dates)):
-        for link, date in zip(l, d):
-            print(f'{link}\n{date}')
-            print(f'{idx_pos}- Currently Scraping {link}')
-            try:
+        if computer_name == 'samuel-linux':
+            self.data_path = '/home/samuel-linux/PycharmProjects/Personal/FantasyBasketball/Data'
+        elif computer_name == 'samuel-pi':
+            self.data_path = '/home/pi/FantasyBasketball/Data'
+
+        if not os.path.exists(self.data_path):
+            os.mkdir(self.data_path)
+            os.mkdir(f'{self.data_path}/pickles')
+            os.mkdir(f'{self.data_path}/bbref-files')
+
+        self.team_dictionary = {
+            'Atlanta Hawks': 'Atl', 'Boston Celtics': 'Bos', 'Brooklyn Nets': 'Bkn', 'Charlotte Hornets': 'Cha',
+            'Chicago Bulls': 'Chi', 'Cleveland Cavaliers': 'Cle', 'Dallas Mavericks': 'Dal', 'Denver Nuggets': 'Den',
+            'Detroit Pistons': 'Det', 'Golden State Warriors': 'GSW', 'Houston Rockets': 'Hou', 'Indiana Pacers': 'Ind',
+            'Los Angeles Lakers': 'LAL', 'Los Angeles Clippers': 'LAC', 'Memphis Grizzlies': 'Mem', 'Miami Heat': 'Mia',
+            'Milwaukee Bucks': 'Mil', 'Minnesota Timberwolves': 'Min', 'New Orleans Pelicans': 'Nor', 'New York Knicks': 'NYK',
+            'Oklahoma City Thunder': 'OKC', 'Orlando Magic': 'Orl', 'Philadelphia 76ers': 'Phi', 'Phoenix Suns': 'Pho',
+            'Portland Trail Blazers': 'Por', 'Sacramento Kings': 'Sac', 'San Antonio Spurs': 'SAS', 'Toronto Raptors': 'Tor',
+            'Utah Jazz': 'Uta', 'Washington Wizards': 'Was'
+        }
+
+    def scrape_stats(self):
+        print(f'Scraping\n','~' * 50, '\n', '\n'.join(self.season_start_links))
+        #get the url for each month in the season
+        self.get_months()
+        # print(self.month_url_dict)
+
+        #get the game links for each game within each month
+        self.get_game_links()
+        # print(self.full_game_urls)
+
+        #scrape each table in each game and save to dataframe
+        self.get_game_stats()
+
+    def get_game_stats(self):
+        # self.full_game_urls = pickle.load(open(f'{self.data_path}/pickles/GameLinks.p', 'rb'))
+        for season, game_links in self.full_game_urls.items():
+            pieces = []
+            pbar = tqdm(game_links, desc = f'Scraping Games: {season}')
+            # total = 0
+            for link in pbar:
                 response = requests.get(link)
                 soup = BeautifulSoup(response.text, 'html.parser')
-                # first table
-                tables = soup.find('table', {'class': "sortable stats_table"})
-                team1 = tables.text.split('\n')[0]
-                parenthesis = team1.find('(')
-                team1 = team_dictionary[team1[:parenthesis - 1]]
-                table1 = tables.find('tbody')
-                table1 = table1.find_all('tr')
-                #second table
-                tables = soup.findAll('table', {'class': "sortable stats_table"})
-                team2 = tables[9].text.split('\n')[0]
-                if team2.strip() == 'Table':
-                    team2 = tables[10].text.split('\n')[0]
-                parenthesis = team2.find('(')
-                team2 = team_dictionary[team2[:parenthesis - 1]]
-                table2 = tables[9].find('tbody')
-                table2 = table2.find_all('tr')
-                game_id = f'{date}-{team1}-{team2}'
-                print(f'({date})\tH: {team1}\tA: {team2}')
-                for idx, t in enumerate([table1, table2]):
-                    if idx == 0:
-                        opp = team2
-                        team = team1
-                        home = 1
-                        away = 0
-                    else:
-                        opp = team1
-                        team = team2
-                        home = 0
-                        away = 1
-                    rows = []
-                    for row in t:
-                        name = row.findAll('th')[0].text
-                        cols = row.findAll('td')
-                        cols = [i.text.strip() for i in cols]
-                        cols.append(name)
-                        rows.append(cols)
-                    for player in rows:
-                        if len(player) < 21:
-                            if 'Did Not' in player[0]:
-                                print(player, len(player))
-                                player_dic = {'Date': date, 'GameID': game_id, 'Name': player[-1], 'Team': team, 'OPP': opp,
-                                              'Home': home, 'Away': away, 'MP': 0, 'FG': 0, 'FGA': 0, 'FG%': 0, '3P': 0, '3PA': 0,
-                                              '3P%': 0, 'FT': 0, 'FTA': 0, 'FT%': 0,'ORB': 0, 'DRB': 0, 'TRB': 0, 'AST': 0,
-                                              'STL': 0, 'BLK': 0, 'TOV': 0, 'PF': 0, 'PTS': 0, '+-': 0
-                                              }
-                                stat_df = stat_df.append(player_dic, ignore_index=True)
-                                continue
-                            else:
-                                print('IGNORE', player)
-                                continue
-                        else:
-                            player = [0 if i == '' else i for i in player]
-                            colon = player[0].find(':')
-                            time = f'{player[0][:colon]}.{player[0][colon + 1::]}'
-                            print(player, len(player))
-                            player_dic = {'Date': date, 'GameID': game_id, 'Name': player[-1], 'Team': team, 'OPP': opp,
-                                          'Home':home, 'Away': away, 'MP': time, 'FG': player[1], 'FGA': player[2],
-                                          'FG%': player[3], '3P': player[4], '3PA': player[5],
-                                          '3P%': player[6],  'FT': player[7], 'FTA': player[8], 'FT%': player[9],
-                                          'ORB': player[10], 'DRB': player[11], 'TRB': player[12], 'AST': player[13],
-                                          'STL': player[14], 'BLK': player[15], 'TOV': player[16], 'PF': player[17],
-                                          'PTS': player[18], '+-': player[19]
-                                          }
-                            stat_df = stat_df.append(player_dic, ignore_index=True)
-                            continue
-                print(f'Finished Scraping: {link}')
-            except Exception as e:
-                raise
-                print(f'Error Scraping: {link}')
-                error = {'URL': {link}, 'Error': str(e)}
-                error_df = error_df.append(error, ignore_index=True)
-                error_df.to_csv(f'Errors_Season({season}).csv', line_terminator='\n', index=False)
-                error_sender(error = str(e))
+                table_df = self.get_table_info(soup, link)
+                pieces.append(table_df)
+                # total += 1
+                # if total == 50:
+                #     break
+            full_season_df = pd.concat(pieces)
+            full_season_df.to_csv(f'{self.data_path}/bbref-files/{season}.csv', index = False)
 
-        stat_df.to_csv(f'Season({season}).csv', line_terminator='\n', index=False)
-        message = f'Saved game stats for the {season} season to a csv'
-        print(message)
+    def get_table_info(self, soup, link):
+        columns = ['Player', 'Date', 'Team', 'Against', 'Home', 'MP', 'FG', 'FGA', 'FG%', '3P', '3PA', '3P%', 'FT', 'FTA', 'FT%', 'ORB',
+                   'DRB', 'TRB', 'AST', 'STL', 'BLK', 'TOV', 'PF', 'PTS', '+/-']
+        # column_2 = ['TS%', 'eFG%',
+        #            'FTr', 'ORB%', 'DRB%', 'TRB%', 'AST%', 'STL%', 'BLK%', 'TOV%', 'USG%', 'ORtg', 'DRtg', 'BPM']
+        header = soup.findAll('h1')[0].text.split(',')
+        date = ''.join(header[-2:]).strip()
+        teams = header[0].split('at')
+        # away_team = teams[0].strip()
+        # home_team = teams[1][:teams[1].find('Box Score')].strip()
+        away_team = teams[0].strip()
+        home_team = teams[-1][:teams[-1].find('Box Score')].strip()
+        if home_team == '':
+            home_team = teams[-2][:teams[-2].find('Box Score')].strip()
+        tables = soup.findAll('tbody')
+        #get unqiue players
+        player_dict = {}
+        away_idx = [0]
+        home_idx = [8]
+        for idx, table in enumerate(tables):
+            # print(idx)
+            # print(table)
+            # print('~'*50)
+            if idx not in away_idx + home_idx:
+                continue
+            if idx in away_idx:
+                team = away_team
+                opp = home_team
+                home = 0
+            else:
+                team = home_team
+                opp = away_team
+                home = 1
+            for row in table:
+                try:
+                    name = row.findAll('th')[0].text
+                    if name == 'Reserves':
+                        continue
+                    player_dict[name] = [name, date, team, opp, home]
+                except AttributeError:
+                    continue
+        for idx, table in enumerate(tables):
+            if idx not in away_idx + home_idx:
+                continue
+            for row in table:
+                try:
+                    name = row.findAll('th')[0].text
+                    cols = row.findAll('td')
+                    if len(cols) == 0:
+                        continue
+                    cols = [i.text.strip() for i in cols]
+                    for c in cols:
+                        player_dict[name].append(c)
+                except AttributeError:
+                    continue
+        game_df_pieces = []
+        for name, l in player_dict.items():
+            row_dict = {col:value for col, value in zip(columns, l)}
+            row_df = pd.DataFrame(row_dict, index = [0])
+            game_df_pieces.append(row_df)
+        game_df = pd.concat(game_df_pieces)
+        game_df['GameLink'] = [link for i in range(len(game_df))]
+        # game_df.to_csv('Tester.csv', index = False)
+        # game_df.to_csv('Tester.csv', index = False)
+        return game_df
 
-    stat_df.to_csv(f'Season({season}).csv', line_terminator='\n', index=False)
-    message = f'Saved game stats for the {season} season to a csv'
-    print(message)
+    def get_game_links(self):
+        self.full_game_urls = {}
+        pbar = tqdm((enumerate(self.month_url_dict.items())), total = len(self.month_url_dict))
+        for idx, (season, month_url_list) in pbar:
+            pbar.set_description(f'({idx+1}-{len(self.month_url_dict)}) | Getting Game URLs: {season}')
+            season_game_urls = []
+            for month_url in month_url_list:
+                response = requests.get(month_url)
+                soup = BeautifulSoup(response.text, 'html.parser')
+                time.sleep(1)
+                table = soup.findAll('tbody')
+                # print(table)
+                game_links = table[0].findAll('a', href = True)
+                for idx, link in enumerate(game_links):
+                    if (idx + 1) % 4 != 0:
+                        continue
+                    if link.text.strip() != 'Box Score':
+                        continue
+                    full_url = f'{self.base_url}{link["href"]}'
+                    season_game_urls.append(full_url)
 
-season14_15 = 'https://www.basketball-reference.com/leagues/NBA_2015_games.html' #2014-15
-season16_17 = 'https://www.basketball-reference.com/leagues/NBA_2017_games.html'
-season17_18 = 'https://www.basketball-reference.com/leagues/NBA_2018_games.html'
-season18_19 = 'https://www.basketball-reference.com/leagues/NBA_2019_games.html'
-season19_20 = 'https://www.basketball-reference.com/leagues/NBA_2020_games.html' #2019-20
-season_stats_getter(season19_20)
-# link_array = [season16_17, season17_18, season18_19, season19_20]
-#
-# for link in link_array[::-1]:
-#     season_stats_getter(link)
+            self.full_game_urls[season] = season_game_urls
+        pbar.close()
+        # pickle.dump(self.full_game_urls, open(f'{self.data_path}/pickles/GameLinks.p', 'wb'))
+        del self.month_url_dict
+
+    def get_months(self):
+        if self.scrape_type == 0:
+            months = ['october', 'november', 'december', 'january', 'february', 'march', 'april', 'may', 'june']
+        elif self.scrape_type == 1:
+            months = ['november', 'december', 'january', 'february', 'march', 'april', 'may', 'june']
+        elif self.scrape_type == 2:
+            months = ['december', 'january', 'february', 'march', 'april', 'may', 'june']
+        elif self.scrape_type == 3:
+            months = ['october-2019', 'november', 'december', 'january', 'february', 'march', 'july', 'august', 'september', 'october-2020']
+        elif self.scrape_type == 4:
+            months = ['december', 'january', 'february', 'march']
+        self.month_url_dict = {}
+        for season_start_link in self.season_start_links:
+            response = requests.get(season_start_link)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            season = soup.find('h1').text.split(' ')[0].strip()
+            if os.path.exists(f'{self.data_path}/bbref-files/{season}.csv'):
+                continue
+            year = f'20{season[season.find("-")+1:]}'
+            season_month_list = []
+            for month in months:
+                base_url = f'https://www.basketball-reference.com/leagues/NBA_{year}_games-{month}.html'
+                season_month_list.append(base_url)
+            self.month_url_dict[season] = season_month_list
+        # print(self.month_url_dict[season])
+
+if __name__ == '__main__':
+
+    season_list_3 = [
+        'https://www.basketball-reference.com/leagues/NBA_2020_games.html'
+    ]
+    season_list_2 = [
+        'https://www.basketball-reference.com/leagues/NBA_2012_games.html',
+    ]
+    season_list_1 = [
+        'https://www.basketball-reference.com/leagues/NBA_2005_games.html',
+        'https://www.basketball-reference.com/leagues/NBA_2006_games.html',
+    ]       #doesnt work with current method
+
+    season_list_0 = [
+        'https://www.basketball-reference.com/leagues/NBA_2001_games.html',
+        'https://www.basketball-reference.com/leagues/NBA_2002_games.html',
+        'https://www.basketball-reference.com/leagues/NBA_2003_games.html',
+        'https://www.basketball-reference.com/leagues/NBA_2004_games.html',
+        'https://www.basketball-reference.com/leagues/NBA_2007_games.html',
+        'https://www.basketball-reference.com/leagues/NBA_2008_games.html',
+        'https://www.basketball-reference.com/leagues/NBA_2009_games.html',
+        'https://www.basketball-reference.com/leagues/NBA_2010_games.html',
+        'https://www.basketball-reference.com/leagues/NBA_2011_games.html',
+        'https://www.basketball-reference.com/leagues/NBA_2013_games.html',
+        'https://www.basketball-reference.com/leagues/NBA_2014_games.html',
+        'https://www.basketball-reference.com/leagues/NBA_2015_games.html',
+        'https://www.basketball-reference.com/leagues/NBA_2016_games.html',
+        'https://www.basketball-reference.com/leagues/NBA_2017_games.html',
+        'https://www.basketball-reference.com/leagues/NBA_2018_games.html',
+        'https://www.basketball-reference.com/leagues/NBA_2019_games.html',
+    ]
+    season_dict = {0: season_list_0, 1: season_list_1, 2: season_list_2, 3: season_list_3}
+    total = len(season_list_0) + len(season_list_1) + len(season_list_2) + len(season_list_3)
+    # print(f'Total Games: {total}')
+    # for scrape_type, season_list in season_dict.items():
+        # nba_stat_scraper = BbrefScraper(season_list, scrape_type = scrape_type)
+        # nba_stat_scraper.scrape_stats()
+
+    season_list = [
+       'https://www.basketball-reference.com/leagues/NBA_2021_games.html'
+    ]
+
+    nba_stat_scraper = BbrefScraper(season_list, scrape_type = 4)
+    nba_stat_scraper.scrape_stats()
