@@ -7,3 +7,4 @@
 - We'll use correlation to determine how likely it is for a player to maintain their either low or high z-score fantasy contributions based on things like position, profile, height, etc. to eventually thigns like wingspan and deflection numbers. 
 - 
 - Second step will be dealing with the problem of z-score and its flaws (data in basketball is often right skewed vs normally distributed)
+- Looks like z-scores will still be the main driver of calculating value. However, while z-scores are important in calculating a general ranking list, I think the next step is calculating marginal utility in boosting one category over another. This is moving into the realm of drafting and streaming based on team comp, and not so much general ranking metrics. 
