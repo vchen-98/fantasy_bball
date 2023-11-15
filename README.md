@@ -8,3 +8,8 @@
 - 
 - Second step will be dealing with the problem of z-score and its flaws (data in basketball is often right skewed vs normally distributed)
 - Looks like z-scores will still be the main driver of calculating value. However, while z-scores are important in calculating a general ranking list, I think the next step is calculating marginal utility in boosting one category over another. This is moving into the realm of drafting and streaming based on team comp, and not so much general ranking metrics. 
+-
+- Live Draft Tool
+- 
+- Category Scarcity for specific leagues
+- Analyzing z-scores (or its alternative) across other teams to understand what categories have the most scarcity. Waiver wire suggestions can then be customized to each specific team you are playing against. 
