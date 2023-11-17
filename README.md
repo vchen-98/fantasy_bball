@@ -10,6 +10,15 @@
 - Looks like z-scores will still be the main driver of calculating value. However, while z-scores are important in calculating a general ranking list, I think the next step is calculating marginal utility in boosting one category over another. This is moving into the realm of drafting and streaming based on team comp, and not so much general ranking metrics. 
 -
 - Live Draft Tool
+- Update your punt categories as you go. 
+- MVP: based on your z-score for your team, as compared to a baseline of the average league z-score of the top 130 players, show the strong and weak categories for your team as a punt assistance tool. 
+- Extended: Player suggestions will look at marginal utility for 6 of the 9 categories, while doing a hard punt on the 3 worst categories of your team. 
+- Extended: Analysis of the rest of the league's team z-scores, determining which categories are highly competitive vs. not competitive. Can be helpful in determining punts. 
 - 
 - Category Scarcity for specific leagues
 - Analyzing z-scores (or its alternative) across other teams to understand what categories have the most scarcity. Waiver wire suggestions can then be customized to each specific team you are playing against. 
+- Punt recommmendations for each player: 
+- Create a system for hard punts for each player based on their z-scores. List these out in the player descriptions. This will most likely only be relevant for the % categories
+- 
+- Account-specific streaming suggestions and waiver wire
+- Once league is imported, access to waiver wire and
